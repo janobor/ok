@@ -16,18 +16,27 @@ st.title("📦 Inventory – Supabase")
 # -----------------------
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
+
+# Sprawdzenie czy zmienne istnieją
+if not SUPABASE_URL or not SUPABASE_KEY:
+    st.error("❌ SUPABASE_URL lub SUPABASE_KEY nie zostały ustawione w Secrets / Environment Variables!")
+    st.stop()
+
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 # -----------------------
 # FUNKCJE
 # -----------------------
 def load_inventory():
-    """Pobierz dane z tabeli inventory w Supabase"""
+    """Pobiera dane z tabeli inventory w Supabase"""
     response = supabase.table("inventory").select("*").execute()
+    if response.error:
+        st.error(f"Błąd pobierania danych: {response.error.message}")
+        return pd.DataFrame()
     return pd.DataFrame(response.data)
 
 def calculate_eoq(demand, order_cost, holding_cost):
-    """Oblicz EOQ dla pojedynczego produktu"""
+    """Oblicza EOQ dla pojedynczego produktu"""
     try:
         return np.sqrt((2 * demand * order_cost) / holding_cost)
     except Exception:
@@ -38,7 +47,7 @@ def calculate_eoq(demand, order_cost, holding_cost):
 # -----------------------
 st.subheader("📊 Dane z Supabase")
 
-# Odśwież dane przy każdym uruchomieniu / przycisku
+# Odświeżanie danych przy każdym wczytaniu lub przycisku
 if st.button("🔄 Odśwież dane"):
     df = load_inventory()
 else:
@@ -65,7 +74,7 @@ else:
     st.dataframe(df[["product", "EOQ"]])
 
     # -----------------------
-    # EXPORT
+    # EXPORT DANYCH
     # -----------------------
     st.subheader("⬇️ Eksport danych")
 
