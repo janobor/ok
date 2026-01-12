@@ -36,14 +36,15 @@ def load_inventory():
         st.error(f"Błąd pobierania danych z Supabase: {e}")
         return pd.DataFrame()
 
-def add_product(product, annual_demand, order_cost, holding_cost):
+def add_product(product, annual_demand, order_cost, holding_cost, unit_price):
     """Dodaje nowy produkt do tabeli inventory w Supabase"""
     try:
         data = {
             "product": product,
             "annual_demand": annual_demand,
             "order_cost": order_cost,
-            "holding_cost": holding_cost
+            "holding_cost": holding_cost,
+            "unit_price": unit_price
         }
         supabase.table("inventory").insert(data).execute()
         st.success(f"Produkt '{product}' dodany do inventory!")
@@ -94,13 +95,14 @@ else:
         annual_demand = st.number_input("Roczny popyt", min_value=0, value=0)
         order_cost = st.number_input("Koszt zamówienia", min_value=0.0, value=0.0, step=0.01)
         holding_cost = st.number_input("Koszt magazynowania", min_value=0.0, value=0.0, step=0.01)
+        unit_price = st.number_input("Cena jednostkowa (unit price)", min_value=0.0, value=0.0, step=0.01)
         submit_button = st.form_submit_button("Dodaj produkt")
 
         if submit_button:
             if product_name.strip() == "":
                 st.warning("Podaj nazwę produktu!")
             else:
-                add_product(product_name, annual_demand, order_cost, holding_cost)
+                add_product(product_name, annual_demand, order_cost, holding_cost, unit_price)
                 df = load_inventory()  # odświeżenie tabeli po dodaniu
 
     # -----------------------
