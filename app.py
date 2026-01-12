@@ -1,93 +1,78 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
+from supabase import create_client
+import os
+from io import BytesIO
 
-st.set_page_config(page_title="Logistics Optimizer", layout="wide")
+# -----------------------
+# CONFIG
+# -----------------------
+st.set_page_config(page_title="Logistics Inventory", layout="wide")
+st.title("📦 Inventory – Supabase")
 
-st.title("📦 Logistics Optimizer Dashboard")
+# Połączenie z Supabase
+SUPABASE_URL = os.getenv("SUPABASE_URL")
+SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 
-# ---------------------------
-# DATA
-# ---------------------------
-data = {
-    "Product": ["A", "B", "C"],
-    "Annual_Demand": [1200, 800, 1500],
-    "Order_Cost": [100, 120, 90],
-    "Holding_Cost": [5, 6, 4],
-    "Unit_Price": [20, 35, 15]
-}
+supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
-df = pd.DataFrame(data)
+# -----------------------
+# FUNKCJE
+# -----------------------
+@st.cache_data
+def load_inventory():
+    response = supabase.table("inventory").select("*").execute()
+    return pd.DataFrame(response.data)
 
-# ---------------------------
-# SIDEBAR
-# ---------------------------
-st.sidebar.header("⚙️ Parametry logistyczne")
-
-transport_cost_per_km = st.sidebar.slider("Koszt transportu (PLN / km)", 1.0, 10.0, 3.5)
-distance = st.sidebar.slider("Odległość magazyn → klient (km)", 10, 500, 120)
-
-# ---------------------------
-# INVENTORY TABLE
-# ---------------------------
-st.subheader("📊 Dane magazynowe")
-edited_df = st.data_editor(df, num_rows="dynamic")
-
-# ---------------------------
-# EOQ CALCULATION
-# ---------------------------
 def calculate_eoq(demand, order_cost, holding_cost):
     return np.sqrt((2 * demand * order_cost) / holding_cost)
 
-edited_df["EOQ"] = edited_df.apply(
-    lambda x: calculate_eoq(
-        x["Annual_Demand"],
-        x["Order_Cost"],
-        x["Holding_Cost"]
-    ),
-    axis=1
-)
+# -----------------------
+# LOAD DATA
+# -----------------------
+df = load_inventory()
 
-# ---------------------------
-# TRANSPORT COST
-# ---------------------------
-edited_df["Transport_Cost"] = (
-    distance * transport_cost_per_km
-)
+if df.empty:
+    st.warning("Tabela inventory jest pusta lub RLS nie pozwala na SELECT.")
+else:
+    st.subheader("📊 Dane z Supabase")
+    st.dataframe(df)
 
-edited_df["Total_Annual_Cost"] = (
-    (edited_df["Annual_Demand"] / edited_df["EOQ"]) * edited_df["Order_Cost"]
-    + (edited_df["EOQ"] / 2) * edited_df["Holding_Cost"]
-    + edited_df["Transport_Cost"]
-)
+    # EOQ
+    df["EOQ"] = df.apply(
+        lambda x: calculate_eoq(
+            x["annual_demand"],
+            x["order_cost"],
+            x["holding_cost"]
+        ),
+        axis=1
+    )
 
-# ---------------------------
-# RESULTS
-# ---------------------------
-st.subheader("📈 Wyniki optymalizacji")
+    st.subheader("📈 EOQ")
+    st.dataframe(df[["product", "EOQ"]])
 
-st.dataframe(
-    edited_df.style.format({
-        "EOQ": "{:.0f}",
-        "Transport_Cost": "{:.2f}",
-        "Total_Annual_Cost": "{:.2f}"
-    })
-)
+    # -----------------------
+    # EXPORT
+    # -----------------------
+    st.subheader("⬇️ Eksport danych")
 
-# ---------------------------
-# CHARTS
-# ---------------------------
-st.subheader("📉 Koszt całkowity wg produktu")
+    # CSV
+    csv = df.to_csv(index=False).encode("utf-8")
+    st.download_button(
+        "📥 Pobierz CSV",
+        csv,
+        "inventory.csv",
+        "text/csv"
+    )
 
-st.bar_chart(
-    edited_df.set_index("Product")["Total_Annual_Cost"]
-)
-
-# ---------------------------
-# SUMMARY
-# ---------------------------
-best_product = edited_df.loc[
-    edited_df["Total_Annual_Cost"].idxmin(), "Product"
-]
-
-st.success(f"✅ Najbardziej opłacalny produkt logistycznie: **{best_product}**")
+    # Excel
+    buffer = BytesIO()
+    with pd.ExcelWriter(buffer, engine="xlsxwriter") as writer:
+        df.to_excel(writer, index=False)
+    st.download_button(
+        "📥 Pobierz Excel",
+        buffer.getvalue(),
+        "inventory.xlsx",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
