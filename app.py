@@ -11,40 +11,52 @@ from io import BytesIO
 st.set_page_config(page_title="Logistics Inventory", layout="wide")
 st.title("📦 Inventory – Supabase")
 
-# Połączenie z Supabase
+# -----------------------
+# POŁĄCZENIE Z SUPABASE
+# -----------------------
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
-
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 # -----------------------
 # FUNKCJE
 # -----------------------
-@st.cache_data
 def load_inventory():
+    """Pobierz dane z tabeli inventory w Supabase"""
     response = supabase.table("inventory").select("*").execute()
     return pd.DataFrame(response.data)
 
 def calculate_eoq(demand, order_cost, holding_cost):
-    return np.sqrt((2 * demand * order_cost) / holding_cost)
+    """Oblicz EOQ dla pojedynczego produktu"""
+    try:
+        return np.sqrt((2 * demand * order_cost) / holding_cost)
+    except Exception:
+        return np.nan
 
 # -----------------------
-# LOAD DATA
+# UI
 # -----------------------
-df = load_inventory()
+st.subheader("📊 Dane z Supabase")
+
+# Odśwież dane przy każdym uruchomieniu / przycisku
+if st.button("🔄 Odśwież dane"):
+    df = load_inventory()
+else:
+    df = load_inventory()
 
 if df.empty:
     st.warning("Tabela inventory jest pusta lub RLS nie pozwala na SELECT.")
 else:
-    st.subheader("📊 Dane z Supabase")
     st.dataframe(df)
 
+    # -----------------------
     # EOQ
+    # -----------------------
     df["EOQ"] = df.apply(
         lambda x: calculate_eoq(
-            x["annual_demand"],
-            x["order_cost"],
-            x["holding_cost"]
+            x.get("annual_demand", 0),
+            x.get("order_cost", 0),
+            x.get("holding_cost", 0)
         ),
         axis=1
     )
