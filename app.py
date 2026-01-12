@@ -17,7 +17,6 @@ st.title("📦 Inventory – Supabase")
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 
-# Sprawdzenie czy zmienne istnieją
 if not SUPABASE_URL or not SUPABASE_KEY:
     st.error("❌ SUPABASE_URL lub SUPABASE_KEY nie zostały ustawione w Secrets / Environment Variables!")
     st.stop()
@@ -29,11 +28,13 @@ supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 # -----------------------
 def load_inventory():
     """Pobiera dane z tabeli inventory w Supabase"""
-    response = supabase.table("inventory").select("*").execute()
-    if response.error:
-        st.error(f"Błąd pobierania danych: {response.error.message}")
+    try:
+        response = supabase.table("inventory").select("*").execute()
+        df = pd.DataFrame(response.data)
+        return df
+    except Exception as e:
+        st.error(f"Błąd pobierania danych z Supabase: {e}")
         return pd.DataFrame()
-    return pd.DataFrame(response.data)
 
 def calculate_eoq(demand, order_cost, holding_cost):
     """Oblicza EOQ dla pojedynczego produktu"""
@@ -47,7 +48,6 @@ def calculate_eoq(demand, order_cost, holding_cost):
 # -----------------------
 st.subheader("📊 Dane z Supabase")
 
-# Odświeżanie danych przy każdym wczytaniu lub przycisku
 if st.button("🔄 Odśwież dane"):
     df = load_inventory()
 else:
@@ -58,9 +58,7 @@ if df.empty:
 else:
     st.dataframe(df)
 
-    # -----------------------
     # EOQ
-    # -----------------------
     df["EOQ"] = df.apply(
         lambda x: calculate_eoq(
             x.get("annual_demand", 0),
@@ -73,19 +71,11 @@ else:
     st.subheader("📈 EOQ")
     st.dataframe(df[["product", "EOQ"]])
 
-    # -----------------------
     # EXPORT DANYCH
-    # -----------------------
     st.subheader("⬇️ Eksport danych")
-
     # CSV
     csv = df.to_csv(index=False).encode("utf-8")
-    st.download_button(
-        "📥 Pobierz CSV",
-        csv,
-        "inventory.csv",
-        "text/csv"
-    )
+    st.download_button("📥 Pobierz CSV", csv, "inventory.csv", "text/csv")
 
     # Excel
     buffer = BytesIO()
